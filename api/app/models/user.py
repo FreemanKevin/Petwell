@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from app.db.base import Base
 
 class User(Base):
+    """User model"""
     __tablename__ = "users"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -22,5 +23,6 @@ class User(Base):
         nullable=False
     )
 
-    # 关联
+    # Relationships
     pets = relationship("Pet", back_populates="owner", cascade="all, delete-orphan")
+    report_templates = relationship("ReportTemplate", back_populates="owner", cascade="all, delete")

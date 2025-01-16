@@ -22,3 +22,7 @@ class Pet(Base):
     owner = relationship("User", back_populates="pets")
     weight_records = relationship("WeightRecord", back_populates="pet", cascade="all, delete-orphan")
     vaccine_records = relationship("VaccineRecord", back_populates="pet", cascade="all, delete-orphan")
+    deworming_records = relationship("Deworming", back_populates="pet", cascade="all, delete")
+    medical_records = relationship("MedicalVisit", back_populates="pet", cascade="all, delete")
+    observations = relationship("DailyObservation", back_populates="pet", cascade="all, delete")
+    reminder_settings = relationship("ReminderSettings", back_populates="pet", cascade="all, delete")

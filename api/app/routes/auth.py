@@ -15,6 +15,7 @@ from app.db.session import get_db
 from app.models.user import User
 from app.schemas.token import Token, RefreshToken
 from app.schemas.user import UserCreate, UserResponse
+from app.schemas.auth import Token, LoginRequest
 
 router = APIRouter(
     prefix="/auth",
@@ -71,45 +72,22 @@ async def login(
     db: Session = Depends(get_db)
 ):
     """
-    Login to get access token.
+    OAuth2 password flow authentication
     
-    Parameters:
-    * **username**: Email address
-    * **password**: Account password
-    
-    Returns:
-    * **access_token**: JWT token for API authentication
-    * **token_type**: Token type (bearer)
-    * **refresh_token**: Token for refreshing access token
+    Form fields:
+    - **username**: Email address for authentication
+    - **password**: Account password
     """
-    # Validate user
-    user = authenticate_user(form_data.username, form_data.password, db)
-    if not user:
+    user = db.query(User).filter(User.email == form_data.username).first()
+    if not user or not verify_password(form_data.password, user.password_hash):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect username or password",
+            detail="Invalid email or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
     
-    # Create access token
-    access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
-    access_token = create_access_token(
-        data={"sub": str(user.id)},
-        expires_delta=access_token_expires
-    )
-    
-    # Create refresh token (longer expiration)
-    refresh_token_expires = timedelta(days=30)  # 30天有效期
-    refresh_token = create_access_token(
-        data={"sub": str(user.id), "refresh": True},
-        expires_delta=refresh_token_expires
-    )
-    
-    return {
-        "access_token": access_token,
-        "token_type": "bearer",
-        "refresh_token": refresh_token
-    }
+    access_token = create_access_token(data={"sub": user.email})
+    return {"access_token": access_token, "token_type": "bearer"}
 
 @router.post("/refresh", response_model=Token)
 async def refresh_token(

@@ -48,18 +48,7 @@ async def create_pet(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """
-    Create a new pet profile.
-    
-    Parameters:
-    * **name**: Pet's name
-    * **species**: Type of pet (e.g., dog, cat)
-    * **gender**: Pet's gender
-    * **breed**: Pet's breed (optional)
-    * **birth_date**: Pet's birth date (optional)
-    
-    Returns created pet profile.
-    """
+    """Create a new pet profile"""
     pet = Pet(**pet_in.model_dump(), owner_id=current_user.id)
     db.add(pet)
     db.commit()

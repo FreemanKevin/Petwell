@@ -8,10 +8,9 @@ from app.core.config import settings
 from app.schemas.token import TokenData
 from sqlalchemy.orm import Session
 from app.db.session import get_db
-from app.models.user import User
 import warnings
 
-# 忽略 passlib 的 bcrypt 版本警告
+# Ignore passlib bcrypt version warning
 warnings.filterwarnings("ignore", ".*bcrypt version.*")
 
 # Password encryption context
@@ -20,9 +19,8 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 # OAuth2 scheme
 oauth2_scheme = OAuth2PasswordBearer(
     tokenUrl=f"{settings.API_V1_STR}/auth/login",
-    scheme_name="JWT Authentication",
-    description="Bearer token authentication",
-    auto_error=True
+    description="OAuth2 authentication with email and password",
+    scheme_name="OAuth2 Authentication"
 )
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
@@ -51,8 +49,8 @@ def create_access_token(data: dict, expires_delta: timedelta | None = None) -> s
 async def get_current_user(
     token: str = Depends(oauth2_scheme),
     db: Session = Depends(get_db)
-) -> User:
-    """Get current user"""
+):
+    """Get current user from token"""
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
@@ -64,16 +62,15 @@ async def get_current_user(
             settings.JWT_SECRET, 
             algorithms=[settings.JWT_ALGORITHM]
         )
-        user_id: str = payload.get("sub")
-        if user_id is None:
+        email: str = payload.get("sub")
+        if email is None:
             raise credentials_exception
-        token_data = TokenData(user_id=user_id)
+        token_data = TokenData(email=email)
     except JWTError:
         raise credentials_exception
     
-    # Get user from database
-    from app.routes.auth import get_user
-    user = get_user(db, int(token_data.user_id))
+    from app.models.user import User  # Import here to avoid circular import
+    user = db.query(User).filter(User.email == token_data.email).first()
     if user is None:
         raise credentials_exception
     return user

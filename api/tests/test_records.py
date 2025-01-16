@@ -1,0 +1,3 @@
+def test_create_weight_record(client, auth_headers):
+    """Test creating a weight record"""
+    # ... 

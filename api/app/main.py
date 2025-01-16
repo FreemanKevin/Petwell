@@ -3,10 +3,11 @@ from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 from datetime import datetime
 from app.core.config import settings
-from app.routes import auth, pets, records, tags_metadata
+from app.routes import auth, pets, records, reports, tags_metadata
 from fastapi.responses import JSONResponse
 from fastapi.encoders import jsonable_encoder
 from fastapi.openapi.docs import get_swagger_ui_html
+from app.utils.init_data import init_default_templates
 
 class CustomJSONResponse(JSONResponse):
     def render(self, content) -> bytes:
@@ -16,32 +17,12 @@ class CustomJSONResponse(JSONResponse):
                     content[key] = value.astimezone(settings.TIMEZONE).isoformat()
         return super().render(jsonable_encoder(content))
 
-# 启动时打印的信息
-startup_message = """
-🚀 Server is running:
-   - API Documentation: http://127.0.0.1:8000/api/docs
-   - ReDoc Documentation: http://127.0.0.1:8000/api/redoc
-   - Health Check: http://127.0.0.1:8000/health
-"""
-
 app = FastAPI(
     title="PetWell API",
     description="""
-    PetWell API - Your Pet's Health Management System
-    
-    ## Authentication
-    1. First login using /api/v1/auth/login to get access token
-    2. Click the 'Authorize' button and enter your token with 'Bearer ' prefix
-    Example: Bearer eyJhbGciOiJIUzI1...
-    
-    ## Features
-    * 👤 User authentication and management
-    * 🐾 Pet profile management
-    * ⚕️ Health records tracking
-    * 📊 Weight monitoring
-    * 💉 Vaccination records
+    Pet health management system with comprehensive record keeping and analysis.
     """,
-    version="1.0.0",
+    version=settings.VERSION,
     docs_url="/api/docs",
     redoc_url="/api/redoc",
     openapi_url="/api/openapi.json",
@@ -62,15 +43,23 @@ app.add_middleware(
 app.include_router(auth.router, prefix=settings.API_V1_STR)
 app.include_router(pets.router, prefix=settings.API_V1_STR)
 app.include_router(records.router, prefix=settings.API_V1_STR)
+app.include_router(reports.router, prefix=settings.API_V1_STR)
 
 # Health check
 @app.get("/health")
 async def health_check():
-    return {"status": "ok"}
+    return {"status": "ok", "version": settings.VERSION}
 
 @app.on_event("startup")
 async def startup_event():
-    print(startup_message)
+    init_default_templates()
+    print(f"""
+🚀 PetWell API is running:
+   - API Documentation: http://127.0.0.1:8000/api/docs
+   - ReDoc Documentation: http://127.0.0.1:8000/api/redoc
+   - Health Check: http://127.0.0.1:8000/health
+   - Version: {settings.VERSION}
+    """)
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000) 

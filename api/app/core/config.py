@@ -3,6 +3,7 @@ from pydantic_settings import BaseSettings
 from datetime import timezone, timedelta
 
 class Settings(BaseSettings):
+    """Application settings"""
     # API settings
     API_V1_STR: str = "/api/v1"
     PROJECT_NAME: str = "PetWell API"

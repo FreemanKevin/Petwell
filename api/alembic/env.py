@@ -8,7 +8,7 @@ from app.db.base import Base
 # Import all models to ensure they are registered with Base
 from app.models.user import User
 from app.models.pet import Pet
-from app.models.record import WeightRecord, VaccineRecord
+from app.models.records import WeightRecord, VaccineRecord
 
 config = context.config
 

@@ -1,4 +1,5 @@
 from fastapi import APIRouter
+from . import auth, pets, records, reports
 
 router = APIRouter()
 
@@ -10,10 +11,16 @@ tags_metadata = [
     },
     {
         "name": "pets",
-        "description": "Pet management operations",
+        "description": "Pet profile management operations",
     },
     {
         "name": "records",
-        "description": "Pet health records management",
+        "description": "Health record management including weight, vaccines, and medical visits",
+    },
+    {
+        "name": "reports",
+        "description": "Generate and manage health reports with customizable templates",
     },
 ]
+
+__all__ = ["auth", "pets", "records", "reports", "tags_metadata"]
