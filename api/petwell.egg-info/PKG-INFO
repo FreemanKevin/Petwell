@@ -1,0 +1,8 @@
+Metadata-Version: 2.2
+Name: petwell
+Version: 0.1.0
+Requires-Dist: fastapi>=0.68.0
+Requires-Dist: uvicorn[standard]>=0.15.0
+Requires-Dist: sqlalchemy>=1.4.23
+Requires-Dist: pytest>=6.2.5
+Dynamic: requires-dist

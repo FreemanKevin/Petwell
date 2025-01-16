@@ -1,0 +1,67 @@
+version: '3.8'
+
+services:
+  api:
+    build: 
+      context: ../../api
+      dockerfile: deploy/docker/Dockerfile
+    environment:
+      - DATABASE_URL=postgresql://postgres:${DB_PASSWORD}@db:5432/petwell
+      - JWT_SECRET=${JWT_SECRET}
+      - MINIO_HOST=minio
+      - MINIO_PORT=9000
+      - MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY}
+      - MINIO_SECRET_KEY=${MINIO_SECRET_KEY}
+      - CORS_ORIGINS=https://petwell.com
+    depends_on:
+      - db
+      - minio
+    restart: always
+    networks:
+      - petwell-network
+
+  db:
+    image: postgres:15
+    environment:
+      - POSTGRES_DB=petwell
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=${DB_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: always
+    networks:
+      - petwell-network
+
+  minio:
+    image: minio/minio
+    environment:
+      - MINIO_ROOT_USER=${MINIO_ACCESS_KEY}
+      - MINIO_ROOT_PASSWORD=${MINIO_SECRET_KEY}
+    volumes:
+      - minio_data:/data
+    command: server /data --console-address ":9001"
+    restart: always
+    networks:
+      - petwell-network
+
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - api
+    restart: always
+    networks:
+      - petwell-network
+
+networks:
+  petwell-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  minio_data: 
