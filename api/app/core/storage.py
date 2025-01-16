@@ -1,121 +1,75 @@
-from datetime import datetime, timedelta
-from typing import Optional
-from fastapi import UploadFile
 from minio import Minio
 from minio.error import S3Error
-import os
+from fastapi import HTTPException, status
 from app.core.config import settings
+import io
+import logging
+from datetime import timedelta
 
-# Create Minio client
-client = Minio(
-    endpoint=f"{settings.MINIO_HOST}:{settings.MINIO_PORT}",
+logger = logging.getLogger(__name__)
+
+# Initialize MinIO client
+minio_client = Minio(
+    f"{settings.MINIO_HOST}:{settings.MINIO_PORT}",
     access_key=settings.MINIO_ACCESS_KEY,
     secret_key=settings.MINIO_SECRET_KEY,
     secure=settings.MINIO_USE_SSL
 )
 
-async def ensure_bucket(bucket_name: str):
-    """Ensure bucket exists"""
-    try:
-        if not client.bucket_exists(bucket_name):
-            client.make_bucket(bucket_name)
-    except S3Error as e:
-        raise Exception(f"Minio error: {e}")
-
-async def upload_file(
-    file: UploadFile,
-    folder: str,
-    filename: Optional[str] = None,
-    bucket: str = settings.MINIO_BUCKET_NAME
-) -> str:
+async def upload_file(file_data: bytes, file_name: str, content_type: str) -> str:
     """
-    Upload file to Minio
+    Upload file to MinIO storage
     
     Args:
-        file: File to upload
-        folder: Storage folder
-        filename: Custom filename (optional)
-        bucket: Bucket name
+        file_data: File bytes
+        file_name: Name of the file
+        content_type: MIME type of the file
     
     Returns:
-        str: File access URL
+        str: Presigned URL of the uploaded file (valid for 7 days)
     """
     try:
-        # Ensure bucket exists
-        await ensure_bucket(bucket)
-        
-        # Generate filename
-        if not filename:
-            ext = os.path.splitext(file.filename)[1]
-            filename = f"{int(datetime.now().timestamp())}{ext}"
-        
-        # Complete object name (including folder)
-        object_name = f"{folder}/{filename}"
-        
         # Upload file
-        content_type = file.content_type or "application/octet-stream"
-        result = client.put_object(
-            bucket_name=bucket,
-            object_name=object_name,
-            data=file.file,
-            length=-1,  # Let Minio calculate file size
+        minio_client.put_object(
+            bucket_name=settings.MINIO_BUCKET_NAME,
+            object_name=file_name,
+            data=io.BytesIO(file_data),
+            length=len(file_data),
             content_type=content_type
         )
         
-        # Generate presigned URL
-        url = client.presigned_get_object(
-            bucket_name=bucket,
-            object_name=object_name,
+        # Generate presigned URL valid for 7 days
+        url = minio_client.presigned_get_object(
+            bucket_name=settings.MINIO_BUCKET_NAME,
+            object_name=file_name,
             expires=timedelta(days=7)
         )
         
+        logger.info(f"File uploaded successfully: {file_name}")
         return url
-        
+    
     except S3Error as e:
-        raise Exception(f"Failed to upload file: {e}")
-
-async def delete_file(
-    file_path: str,
-    bucket: str = settings.MINIO_BUCKET_NAME
-) -> bool:
-    """
-    Delete file from Minio
-    
-    Args:
-        file_path: File path (folder/filename)
-        bucket: Bucket name
-    
-    Returns:
-        bool: Whether deletion was successful
-    """
-    try:
-        client.remove_object(bucket, file_path)
-        return True
-    except S3Error as e:
-        raise Exception(f"Failed to delete file: {e}")
-
-async def get_file_url(
-    file_path: str,
-    bucket: str = settings.MINIO_BUCKET_NAME,
-    expires: timedelta = timedelta(hours=1)
-) -> str:
-    """
-    Get presigned URL for file
-    
-    Args:
-        file_path: File path
-        bucket: Bucket name
-        expires: URL expiration time
-    
-    Returns:
-        str: Presigned URL
-    """
-    try:
-        url = client.presigned_get_object(
-            bucket_name=bucket,
-            object_name=file_path,
-            expires=expires
+        logger.error(f"MinIO error: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to upload file: {str(e)}"
         )
-        return url
+
+async def delete_file(file_name: str) -> None:
+    """
+    Delete file from MinIO storage
+    
+    Args:
+        file_name: Name of the file to delete
+    """
+    try:
+        minio_client.remove_object(
+            bucket_name=settings.MINIO_BUCKET_NAME,
+            object_name=file_name
+        )
     except S3Error as e:
-        raise Exception(f"Failed to get file URL: {e}")
+        logger.error(f"Failed to delete file {file_name}: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to delete file: {str(e)}"
+        )

@@ -9,12 +9,21 @@ from app.schemas.token import TokenData
 from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.models.user import User
+import warnings
+
+# 忽略 passlib 的 bcrypt 版本警告
+warnings.filterwarnings("ignore", ".*bcrypt version.*")
 
 # Password encryption context
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 # OAuth2 scheme
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f"{settings.API_V1_STR}/auth/login")
+oauth2_scheme = OAuth2PasswordBearer(
+    tokenUrl=f"{settings.API_V1_STR}/auth/login",
+    scheme_name="JWT Authentication",
+    description="Bearer token authentication",
+    auto_error=True
+)
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """Verify password"""
@@ -68,3 +77,29 @@ async def get_current_user(
     if user is None:
         raise credentials_exception
     return user
+
+def verify_refresh_token(refresh_token: str) -> str:
+    """
+    Verify refresh token and return user_id
+    """
+    try:
+        payload = jwt.decode(
+            refresh_token,
+            settings.JWT_SECRET,
+            algorithms=[settings.JWT_ALGORITHM]
+        )
+        user_id: str = payload.get("sub")
+        is_refresh: bool = payload.get("refresh", False)
+        
+        if user_id is None or not is_refresh:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid refresh token"
+            )
+        
+        return user_id
+    except JWTError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid refresh token"
+        )

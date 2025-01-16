@@ -1,5 +1,6 @@
 from typing import List
 from pydantic_settings import BaseSettings
+from datetime import timezone, timedelta
 
 class Settings(BaseSettings):
     # API settings
@@ -24,6 +25,10 @@ class Settings(BaseSettings):
     MINIO_ACCESS_KEY: str = "minioadmin"
     MINIO_SECRET_KEY: str = "minioadmin"
     MINIO_USE_SSL: bool = False
+    MINIO_BUCKET_NAME: str = "petwell"
+    
+    # Timezone
+    TIMEZONE: timezone = timezone(timedelta(hours=8))  # 中国标准时间 UTC+8
     
     class Config:
         env_file = ".env"

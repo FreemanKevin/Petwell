@@ -1,6 +1,7 @@
 from typing import Optional
 from datetime import datetime
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, field_validator
+from app.core.config import settings
 
 class PetBase(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -8,6 +9,12 @@ class PetBase(BaseModel):
     species: str
     gender: str
     breed: str | None = None
+
+    @field_validator('*', mode='before')
+    def convert_datetime(cls, v):
+        if isinstance(v, datetime):
+            return v.astimezone(settings.TIMEZONE)
+        return v
 
 class PetCreate(PetBase):
     birth_date: datetime | None = None

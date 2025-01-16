@@ -1,5 +1,5 @@
 from typing import List
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query, status
 from sqlalchemy.orm import Session
 from app.core.security import get_current_user
 from app.core.storage import upload_file, delete_file
@@ -8,6 +8,9 @@ from app.models.user import User
 from app.models.pet import Pet
 from app.schemas.pet import PetCreate, PetUpdate, PetResponse
 from app.routes.deps import validate_image
+from app.utils.file_validator import FileValidator
+from app.utils.avatar_generator import AvatarGenerator
+from urllib.parse import urlparse
 
 router = APIRouter(
     prefix="/pets",
@@ -157,60 +160,64 @@ async def delete_pet(
     db.commit()
     return {"status": "success"}
 
-@router.post("/{pet_id}/avatar")
+@router.post("/{pet_id}/avatar", response_model=PetResponse)
 async def upload_avatar(
     pet_id: int,
-    file: UploadFile = File(...),
+    file: UploadFile = File(None, description="Image file (optional). Supported formats: JPG, PNG, GIF"),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """
-    Upload a profile picture for a pet.
-    
-    Parameters:
-    * **pet_id**: ID of the pet
-    * **file**: Image file (JPG, PNG, or GIF)
-    
-    Returns:
-    * **avatar_url**: URL of the uploaded image
-    
-    Raises:
-    * **400**: Invalid image file
-    * **404**: Pet not found
-    * **401**: Not authorized to modify this pet
+    Upload or generate pet avatar
     """
-    # Verify pet ownership
-    pet = db.query(Pet).filter(
-        Pet.id == pet_id,
-        Pet.owner_id == current_user.id
-    ).first()
-    if not pet:
-        raise HTTPException(status_code=404, detail="Pet not found")
-    
-    # Validate image file
-    file = await validate_image(file)
+    # Validate pet ownership
+    pet = db.query(Pet).filter(Pet.id == pet_id).first()
+    if not pet or pet.owner_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Pet not found"
+        )
     
     try:
-        # Upload file to Minio
+        if file:
+            # 处理上传的文件
+            file_data, image_type = await FileValidator.validate_image(file)
+            file_name = f"pets/{pet_id}/avatar.{image_type}"
+        else:
+            # 生成默认头像
+            file_data = AvatarGenerator.generate_default_avatar(
+                species=pet.species
+            )
+            file_name = f"pets/{pet_id}/avatar.png"
+        
+        # 删除旧头像
+        if pet.avatar_url:
+            try:
+                # 从 URL 中提取文件名
+                old_file_name = f"pets/{pet_id}/avatar.{pet.avatar_url.split('.')[-1].split('?')[0]}"
+                await delete_file(old_file_name)
+            except Exception as e:
+                logger.warning(f"Failed to delete old avatar: {str(e)}")
+                # 继续处理，不要因为删除旧文件失败而中断
+        
+        # 上传新头像
         avatar_url = await upload_file(
-            file=file,
-            folder="avatars",
-            filename=f"pet_{pet_id}_{int(datetime.now().timestamp())}"
+            file_data=file_data,
+            file_name=file_name,
+            content_type='image/png' if not file else f'image/{image_type}'
         )
         
-        # Delete old avatar if exists
-        if pet.avatar_url:
-            old_path = pet.avatar_url.split("/")[-2:]  # Get folder/filename
-            await delete_file("/".join(old_path))
-        
-        # Update pet avatar URL
+        # 更新记录
         pet.avatar_url = avatar_url
         db.commit()
+        db.refresh(pet)
         
-        return {"avatar_url": avatar_url}
+        return pet
         
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(
-            status_code=500,
-            detail=f"Failed to upload file: {str(e)}"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to process avatar: {str(e)}"
         )
